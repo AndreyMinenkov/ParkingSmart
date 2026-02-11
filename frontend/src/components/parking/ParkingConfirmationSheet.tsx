@@ -1,0 +1,73 @@
+import React from 'react';
+
+interface ParkingConfirmationSheetProps {
+  onConfirm: (isBlocking: boolean) => void;
+  onClose: () => void;
+}
+
+const ParkingConfirmationSheet: React.FC<ParkingConfirmationSheetProps> = ({ onConfirm, onClose }) => {
+  return (
+    <div className="fixed inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-lg animate-slide-up z-40">
+      <div className="p-6">
+        <div className="w-12 h-1.5 bg-neutral-300 rounded-full mx-auto mb-6" />
+        
+        <h3 className="text-xl font-bold text-center text-neutral-900 mb-8">
+          Как вы паркуетесь?
+        </h3>
+
+        <div className="space-y-4">
+          {/* Не блокирую */}
+          <button
+            onClick={() => onConfirm(false)}
+            className="w-full p-5 border-2 border-success/30 rounded-xl hover:border-success hover:bg-success/5 active:scale-[0.98] transition-all text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-5 h-5 rounded-full bg-success group-hover:scale-110 transition-transform" />
+              <div className="flex-1">
+                <p className="font-semibold text-neutral-900 text-lg">
+                  Не блокирую
+                </p>
+                <p className="text-sm text-neutral-400 mt-1">
+                  Никому не мешаю, проезд свободен
+                </p>
+              </div>
+              <svg className="w-6 h-6 text-success opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Блокирую */}
+          <button
+            onClick={() => onConfirm(true)}
+            className="w-full p-5 border-2 border-error/30 rounded-xl hover:border-error hover:bg-error/5 active:scale-[0.98] transition-all text-left group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-5 h-5 rounded-full bg-error group-hover:scale-110 transition-transform" />
+              <div className="flex-1">
+                <p className="font-semibold text-neutral-900 text-lg">
+                  Блокирую выезд
+                </p>
+                <p className="text-sm text-neutral-400 mt-1">
+                  Готов к звонку, если кому-то понадобится выехать
+                </p>
+              </div>
+              <svg className="w-6 h-6 text-error opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </button>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full h-12 text-center text-neutral-400 font-medium mt-8 hover:text-neutral-600 transition-colors"
+        >
+          Отмена
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default ParkingConfirmationSheet;
