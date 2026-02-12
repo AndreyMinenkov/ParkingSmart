@@ -5,7 +5,7 @@ interface YandexMapProps {
   center: [number, number];
   draggableMarker: { position: [number, number] } | null;
   onMarkerDrag: (coords: [number, number]) => void;
-  onMapClick?: (coords: [number, number]) => void;  // ИСПРАВЛЕНО: теперь передаём координаты, а не событие
+  onMapClick?: (e: any) => void;
   onMarkerDragStart?: () => void;
   onMarkerDragEnd?: (coords: [number, number]) => void;
 }
@@ -19,16 +19,14 @@ const YandexMap: React.FC<YandexMapProps> = ({
   onMarkerDragEnd
 }) => {
   const handleMapClick = (e: any) => {
+    console.log('���️ Клик по карте (YandexMap)');
+    if (onMapClick) {
+      onMapClick(e);
+    }
+    
     // Получаем координаты клика
     const coords = e.get('coords');
     
-    console.log('���️ Клик по карте (YandexMap), координаты:', coords);
-    
-    // Передаём координаты наверх
-    if (onMapClick) {
-      onMapClick(coords);
-    }
-
     // Сдвигаем маркер вниз на 15 пикселей (в координатах карты)
     // Приблизительное смещение: 0.00015 градуса ≈ 15 пикселей при зуме 17
     if (draggableMarker && onMarkerDrag) {

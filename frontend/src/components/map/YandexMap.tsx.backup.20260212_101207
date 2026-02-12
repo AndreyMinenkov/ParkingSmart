@@ -5,7 +5,7 @@ interface YandexMapProps {
   center: [number, number];
   draggableMarker: { position: [number, number] } | null;
   onMarkerDrag: (coords: [number, number]) => void;
-  onMapClick?: (coords: [number, number]) => void;  // ИСПРАВЛЕНО: теперь передаём координаты, а не событие
+  onMapClick?: (e: any) => void;
   onMarkerDragStart?: () => void;
   onMarkerDragEnd?: (coords: [number, number]) => void;
 }
@@ -19,37 +19,18 @@ const YandexMap: React.FC<YandexMapProps> = ({
   onMarkerDragEnd
 }) => {
   const handleMapClick = (e: any) => {
+    if (onMapClick) {
+      onMapClick(e);
+    }
+    
     // Получаем координаты клика
     const coords = e.get('coords');
     
-    console.log('���️ Клик по карте (YandexMap), координаты:', coords);
-    
-    // Передаём координаты наверх
-    if (onMapClick) {
-      onMapClick(coords);
-    }
-
     // Сдвигаем маркер вниз на 15 пикселей (в координатах карты)
     // Приблизительное смещение: 0.00015 градуса ≈ 15 пикселей при зуме 17
     if (draggableMarker && onMarkerDrag) {
       const offsetCoords: [number, number] = [coords[0] - 0.00015, coords[1]];
-      console.log('� ��Сдвиг маркера на:', offsetCoords);
       onMarkerDrag(offsetCoords);
-    }
-  };
-
-  const handleDragStart = () => {
-    console.log('� ��Событие onDragStart сработало в YandexMap');
-    if (onMarkerDragStart) {
-      onMarkerDragStart();
-    }
-  };
-
-  const handleDragEnd = (e: any) => {
-    const coords = e.get('target').geometry.getCoordinates();
-    console.log('� ��Событие onDragEnd сработало в YandexMap, координаты:', coords);
-    if (onMarkerDragEnd) {
-      onMarkerDragEnd(coords);
     }
   };
 
@@ -92,8 +73,13 @@ const YandexMap: React.FC<YandexMapProps> = ({
             properties={{
               hintContent: 'Укажите место'
             }}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            onDragStart={onMarkerDragStart}
+            onDragEnd={(e: any) => {
+              const coords = e.get('target').geometry.getCoordinates();
+              if (onMarkerDragEnd) {
+                onMarkerDragEnd(coords);
+              }
+            }}
           />
         )}
         <GeolocationControl options={{ float: 'left' }} />

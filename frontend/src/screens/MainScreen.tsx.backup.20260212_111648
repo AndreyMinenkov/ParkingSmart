@@ -13,8 +13,11 @@ const MainScreen: React.FC = () => {
   const [showBlockersScreen, setShowBlockersScreen] = useState(false);
   const [draggableMarker, setDraggableMarker] = useState<{ position: [number, number] } | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number]>([55.751244, 37.618423]);
-  
+
+  const [hasStartedInteraction, setHasStartedInteraction] = useState(false);
+  const [hasEndedInteraction, setHasEndedInteraction] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isInteractionEndingRef = useRef(false);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -36,72 +39,100 @@ const MainScreen: React.FC = () => {
     }
   }, []);
 
-  // =============================================
-  // ЕДИНСТВЕННЫЙ ТАЙМЕР — СБРАСЫВАЕТСЯ ПРИ ЛЮБОМ ДЕЙСТВИИ
-  // =============================================
-  const resetInactivityTimer = () => {
-    // Скрываем панель при новом действии (ЭТО БЫЛО УТЕРЯНО!)
-    if (showParkingSheet) {
-      console.log('� ��Новое действие — скрываем панель');
-      setShowParkingSheet(false);
+  useEffect(() => {
+    if (draggableMarker) {
+      setHasStartedInteraction(false);
+      setHasEndedInteraction(false);
+      isInteractionEndingRef.current = false;
     }
-    
-    // Сбрасываем старый таймер
+  }, [draggableMarker]);
+
+  useEffect(() => {
+    if (draggableMarker &&
+        !hasActiveParking &&
+        hasStartedInteraction &&
+        hasEndedInteraction &&
+        !showParkingSheet) {
+
+      console.log('✅ Условия выполнены: начало + конец взаимодействия. Запускаем таймер 3 секунды');
+
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+
+      timerRef.current = setTimeout(() => {
+        console.log('⏰ 3 секунды прошли — показываем панель парковки');
+        setShowParkingSheet(true);
+        timerRef.current = null;
+      }, 3000);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [draggableMarker, hasActiveParking, hasStartedInteraction, hasEndedInteraction, showParkingSheet]);
+
+  const handleInteractionStart = () => {
+    console.log('▶️ НАЧАЛО взаимодействия');
+    setHasStartedInteraction(true);
+    setHasEndedInteraction(false);
+    setShowParkingSheet(false);
+    isInteractionEndingRef.current = false;
+
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    
-    // Запускаем новый таймер на 3 секунды
-    timerRef.current = setTimeout(() => {
-      console.log('⏰ 3 секунды бездействия — показываем панель парковки');
-      
-      // Показываем панель ТОЛЬКО если есть маркер и нет активной парковки
-      if (draggableMarker && !hasActiveParking) {
-        console.log('✅ Показываем панель парковки');
-        setShowParkingSheet(true);
-      } else {
-        console.log('❌ Не показываем панель:', { 
-          hasMarker: !!draggableMarker, 
-          hasActiveParking 
-        });
-      }
-      
-      timerRef.current = null;
-    }, 3000);
   };
 
-  // =============================================
-  // ДЕЙСТВИЯ С МАРКЕРОМ
-  // =============================================
-  const handleMarkerUpdate = (newCoords: [number, number]) => {
-    console.log('� ��Обновление позиции маркера:', newCoords);
+  const handleInteractionEnd = (finalCoords: [number, number]) => {
+    if (isInteractionEndingRef.current) {
+      console.log('⏹️ КОНЕЦ взаимодействия (игнорируем дубль)');
+      return;
+    }
     
-    // Обновляем позицию маркера
-    setDraggableMarker({ position: newCoords });
+    console.log('⏹️ КОНЕЦ взаимодействия');
+    isInteractionEndingRef.current = true;
+    setHasEndedInteraction(true);
     
-    // Сбрасываем таймер бездействия (автоматически скроет панель)
-    resetInactivityTimer();
+    if (draggableMarker) {
+      setDraggableMarker({ position: finalCoords });
+    }
   };
 
   const handleMarkerDragStart = () => {
-    console.log('� ��Начало перетаскивания');
-    resetInactivityTimer();
+    console.log('� ��НАЧАЛО перетаскивания маркера');
+    handleInteractionStart();
   };
 
   const handleMarkerDragEnd = (coords: [number, number]) => {
-    console.log('� ��Конец перетаскивания:', coords);
-    handleMarkerUpdate(coords);
+    console.log('�� КОНЕЦ перетаскивания маркера:', coords);
+    handleInteractionEnd(coords);
   };
 
   const handleMapClick = (coords: [number, number]) => {
-    console.log('��️ Клик по карте — перемещаем маркер');
-    handleMarkerUpdate(coords);
+    console.log('���️ Клик по карте — перемещаем маркер и завершаем взаимодействие');
+    
+    // 1. Скрываем панель если была открыта
+    setShowParkingSheet(false);
+    
+    // 2. Если это ПЕРВОЕ взаимодействие — начинаем
+    if (!hasStartedInteraction) {
+      handleInteractionStart();
+    }
+    
+    // 3. Обновляем позицию маркера
+    if (draggableMarker) {
+      setDraggableMarker({ position: coords });
+    }
+    
+    // 4. **ВАЖНО**: Завершаем взаимодействие (таймер пойдёт)
+    handleInteractionEnd(coords);
   };
 
-  // =============================================
-  // ОСТАЛЬНЫЕ ОБРАБОТЧИКИ
-  // =============================================
   const handleLogout = async () => {
     try {
       await authAPI.logout();
@@ -127,12 +158,9 @@ const MainScreen: React.FC = () => {
       setExpiresAt(response.data.parking.expiresAt);
       setShowParkingSheet(false);
       setDraggableMarker(null);
-      
-      // Очищаем таймер
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      setHasStartedInteraction(false);
+      setHasEndedInteraction(false);
+      isInteractionEndingRef.current = false;
     } catch (error) {
       console.error('Parking confirm error:', error);
     }
@@ -141,16 +169,6 @@ const MainScreen: React.FC = () => {
   const handleParkingClose = () => {
     setShowParkingSheet(false);
   };
-
-  // Очистка таймера при размонтировании
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
 
   return (
     <div className="h-screen flex flex-col">

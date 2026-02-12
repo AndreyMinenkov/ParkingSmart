@@ -1,0 +1,56 @@
+-- Создание базы данных
+CREATE DATABASE parkingsmart;
+\c parkingsmart;
+
+-- Расширение PostGIS для геопоиска
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- =====================================================
+-- Таблица 1: users (пользователи)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    phone_hash VARCHAR(64) UNIQUE NOT NULL,
+    phone_encrypted VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at DESC);
+
+-- =====================================================
+-- Таблица 2: parkings (парковки)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS parkings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lat DECIMAL(9,6) NOT NULL,
+    lon DECIMAL(9,6) NOT NULL,
+    location GEOGRAPHY(POINT, 4326),
+    is_blocking BOOLEAN NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '12 hours')
+);
+
+-- Индексы для быстрого поиска
+CREATE INDEX IF NOT EXISTS idx_parkings_location ON parkings USING GIST(location);
+CREATE INDEX IF NOT EXISTS idx_parkings_user_created ON parkings(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_parkings_expires ON parkings(expires_at);
+
+-- Индекс для активных блокирующих (без WHERE, с фильтром в запросе)
+CREATE INDEX IF NOT EXISTS idx_parkings_blocking ON parkings(user_id) WHERE is_blocking = TRUE;
+
+-- =====================================================
+-- Таблица 3: calls (звонки)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS calls (
+    id SERIAL PRIMARY KEY,
+    blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    caller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    called_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT unique_call_per_pair UNIQUE (blocker_id, caller_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calls_blocker ON calls(blocker_id, called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_caller ON calls(caller_id, called_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_recent ON calls(called_at DESC);

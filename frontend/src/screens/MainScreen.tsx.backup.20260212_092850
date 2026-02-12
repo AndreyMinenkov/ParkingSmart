@@ -1,0 +1,210 @@
+import React, { useState, useEffect, useRef } from 'react';
+import SystemStatusBar from '../components/layout/SystemStatusBar';
+import YandexMap from '../components/map/YandexMap';
+import ParkingConfirmationSheet from '../components/parking/ParkingConfirmationSheet';
+import BlockersScreen from './BlockersScreen';
+import { parkingAPI } from '../services/api';
+
+const MainScreen: React.FC = () => {
+  const [hasActiveParking, setHasActiveParking] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [showParkingSheet, setShowParkingSheet] = useState(false);
+  const [showBlockersScreen, setShowBlockersScreen] = useState(false);
+  const [draggableMarker, setDraggableMarker] = useState<{ position: [number, number] } | null>(null);
+  const [userLocation, setUserLocation] = useState<[number, number]>([55.751244, 37.618423]);
+  
+  const [hasStartedInteraction, setHasStartedInteraction] = useState(false);
+  const [hasEndedInteraction, setHasEndedInteraction] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setUserLocation(coords);
+          console.log('Устанавливаем маркер по геолокации:', coords);
+          setDraggableMarker({ position: coords });
+        },
+        (error) => {
+          console.error('Ошибка геолокации:', error);
+          const defaultCoords: [number, number] = [55.751244, 37.618423];
+          console.log('Устанавливаем маркер по умолчанию:', defaultCoords);
+          setDraggableMarker({ position: defaultCoords });
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      const defaultCoords: [number, number] = [55.751244, 37.618423];
+      console.log('Геолокация не поддерживается, маркер по умолчанию');
+      setDraggableMarker({ position: defaultCoords });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (draggableMarker) {
+      setHasStartedInteraction(false);
+      setHasEndedInteraction(false);
+    }
+  }, [draggableMarker]);
+
+  useEffect(() => {
+    if (draggableMarker && 
+        !hasActiveParking && 
+        hasStartedInteraction && 
+        hasEndedInteraction && 
+        !showParkingSheet) {
+      
+      console.log('✅ Условия выполнены: начало + конец взаимодействия. Запускаем таймер 3 секунды');
+      
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+      
+      timerRef.current = setTimeout(() => {
+        console.log('!!! ТАЙМЕР СРАБОТАЛ, ВЫЗЫВАЕМ setShowParkingSheet !!!');
+        setShowParkingSheet(true);
+        console.log('showParkingSheet установлен в true, текущее значение:', showParkingSheet);
+        timerRef.current = null;
+      }, 3000);
+    }
+    
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [draggableMarker, hasActiveParking, hasStartedInteraction, hasEndedInteraction, showParkingSheet]);
+
+  const handleInteractionStart = () => {
+    console.log('▶️ НАЧАЛО взаимодействия');
+    setHasStartedInteraction(true);
+    setHasEndedInteraction(false);
+    setShowParkingSheet(false);
+    
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const handleInteractionEnd = () => {
+    console.log('⏹️ КОНЕЦ взаимодействия');
+    setHasEndedInteraction(true);
+  };
+
+  const handleMarkerDragStart = () => {
+    handleInteractionStart();
+  };
+
+  const handleMarkerDrag = (coords: [number, number]) => {
+    setDraggableMarker({ position: coords });
+  };
+
+  const handleMarkerDragEnd = (coords: [number, number]) => {
+    console.log('Маркер перемещён:', coords);
+    setDraggableMarker({ position: coords });
+    handleInteractionEnd();
+  };
+
+  const handleMapClick = (e: any) => {
+    console.log('Клик по карте');
+    
+    if (e && e.get && e.get('coords')) {
+      const coords = e.get('coords');
+      const offsetCoords: [number, number] = [coords[0] - 0.00015, coords[1]];
+      setDraggableMarker({ position: offsetCoords });
+    }
+    
+    handleInteractionStart();
+    handleInteractionEnd();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.reload();
+  };
+
+  const handleParkingConfirm = async (isBlocking: boolean) => {
+    try {
+      if (!draggableMarker) return;
+
+      const response = await parkingAPI.create({
+        lat: draggableMarker.position[0],
+        lon: draggableMarker.position[1],
+        isBlocking
+      });
+
+      setHasActiveParking(true);
+      setIsBlocking(isBlocking);
+      setExpiresAt(response.data.parking.expiresAt);
+      setShowParkingSheet(false);
+      setDraggableMarker(null);
+      setHasStartedInteraction(false);
+      setHasEndedInteraction(false);
+      
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+
+      alert('Парковка сохранена');
+    } catch (error) {
+      console.error('Ошибка сохранения парковки:', error);
+      alert('Ошибка при сохранении парковки');
+    }
+  };
+
+  const handleParkingClose = () => {
+    setShowParkingSheet(false);
+    setHasStartedInteraction(false);
+    setHasEndedInteraction(false);
+    
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  return (
+    <div className="h-screen flex flex-col">
+      <SystemStatusBar
+        isBlocking={isBlocking}
+        expiresAt={expiresAt}
+        onLogout={handleLogout}
+      />
+
+      <div className="flex-1 relative">
+        <YandexMap
+          center={userLocation}
+          draggableMarker={draggableMarker}
+          onMarkerDrag={handleMarkerDrag}
+          onMarkerDragStart={handleMarkerDragStart}
+          onMarkerDragEnd={handleMarkerDragEnd}
+          onMapClick={handleMapClick}
+        />
+      </div>
+
+      {showParkingSheet && (
+        <ParkingConfirmationSheet
+          onConfirm={handleParkingConfirm}
+          onClose={handleParkingClose}
+        />
+      )}
+
+      {showBlockersScreen && (
+        <BlockersScreen
+          onClose={() => setShowBlockersScreen(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default MainScreen;
