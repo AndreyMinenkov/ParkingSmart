@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: parkingsmart
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Kapapa661109
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -28,13 +28,12 @@ services:
     container_name: parkingsmart-backend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV}
       PORT: 3000
-      DATABASE_URL: postgresql://postgres:Kapapa661109@postgres:5432/parkingsmart
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/parkingsmart
       JWT_SECRET: ${JWT_SECRET}
-      FRONTEND_URL: http://localhost:8080
-    env_file:
-      - ./backend/.env
+      PHONE_ENCRYPTION_KEY: ${PHONE_ENCRYPTION_KEY}
+      IV_LENGTH: ${IV_LENGTH}
     ports:
       - "3000:3000"
     depends_on:
@@ -43,11 +42,10 @@ services:
     networks:
       - parkingsmart-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
 
   frontend:
     build: ./frontend

@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS parkings (
     location GEOGRAPHY(POINT, 4326),
     is_blocking BOOLEAN NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '12 hours')
+    expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '48 hours')
 );
 
 -- Индексы для быстрого поиска

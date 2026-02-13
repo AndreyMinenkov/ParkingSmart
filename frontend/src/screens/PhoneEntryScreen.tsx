@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import TermsCheckbox from '../components/legal/TermsCheckbox';
+import { authAPI } from '../services/api';
 
 interface PhoneEntryScreenProps {
   onPhoneSubmit: (phone: string) => void;
@@ -6,68 +8,140 @@ interface PhoneEntryScreenProps {
 
 const PhoneEntryScreen: React.FC<PhoneEntryScreenProps> = ({ onPhoneSubmit }) => {
   const [phone, setPhone] = useState('');
-  const [isValid, setIsValid] = useState(false);
+  const [isTermsChecked, setIsTermsChecked] = useState(false);
+  const [isCheckingUser, setIsCheckingUser] = useState(false);
 
   const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    const trimmed = numbers.slice(0, 11);
+    // Удаляем все нецифровые символы
+    const digits = value.replace(/\D/g, '');
     
-    if (trimmed.length === 0) return '';
-    if (trimmed.length === 1) return `+${trimmed}`;
-    if (trimmed.length <= 4) return `+${trimmed.slice(0, 1)} ${trimmed.slice(1)}`;
-    if (trimmed.length <= 7) return `+${trimmed.slice(0, 1)} ${trimmed.slice(1, 4)} ${trimmed.slice(4)}`;
-    if (trimmed.length <= 9) return `+${trimmed.slice(0, 1)} ${trimmed.slice(1, 4)} ${trimmed.slice(4, 7)} ${trimmed.slice(7)}`;
-    return `+${trimmed.slice(0, 1)} ${trimmed.slice(1, 4)} ${trimmed.slice(4, 7)} ${trimmed.slice(7, 9)} ${trimmed.slice(9, 11)}`;
-  };
+    // Ограничиваем 11 цифрами
+    if (digits.length > 11) {
+      return phone;
+    }
 
-  const validatePhone = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    return numbers.length === 11 && (numbers[0] === '7' || numbers[0] === '8');
+    // Форматируем: +7 XXX XXX XX XX
+    if (digits.length === 0) return '';
+    if (digits.length <= 1) return `+7`;
+    if (digits.length <= 4) {
+      return `+7 ${digits.slice(1, 4)}`;
+    }
+    if (digits.length <= 7) {
+      return `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)}`;
+    }
+    if (digits.length <= 9) {
+      return `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)}`;
+    }
+    return `+7 ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)} ${digits.slice(9, 11)}`;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '');
-    setPhone(raw);
-    setIsValid(validatePhone(raw));
+    const formatted = formatPhone(e.target.value);
+    setPhone(formatted);
+    
+    // Сбрасываем чекбокс при изменении номера
+    setIsTermsChecked(false);
   };
 
-  const maskedPhone = `+7 *** *** ${phone.slice(-4)}`;
+  // Проверяем, существует ли пользователь при вводе номера
+  useEffect(() => {
+    const checkUserExists = async () => {
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length === 11) {
+        setIsCheckingUser(true);
+        try {
+          // Пытаемся залогиниться - если пользователь существует, isNewUser будет false
+          const response = await authAPI.loginOrRegister(digits);
+          if (!response.data.isNewUser) {
+            // Существующий пользователь - отмечаем чекбокс
+            setIsTermsChecked(true);
+          }
+        } catch (error) {
+          console.error('Ошибка проверки пользователя:', error);
+        } finally {
+          setIsCheckingUser(false);
+        }
+      }
+    };
+
+    // Дебаунс, чтобы не спамить запросами
+    const timeoutId = setTimeout(checkUserExists, 500);
+    return () => clearTimeout(timeoutId);
+  }, [phone]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 11 && isTermsChecked) {
+      onPhoneSubmit(digits);
+    }
+  };
+
+  const isValidPhone = phone.replace(/\D/g, '').length === 11;
+  const isButtonEnabled = isValidPhone && isTermsChecked;
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm animate-slide-up">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl font-bold text-neutral-900">
+    <div className="min-h-screen bg-surface flex flex-col animate-fade-in">
+      <div className="flex-1 flex flex-col justify-center px-6 max-w-md mx-auto w-full">
+        <div className="mb-12">
+          <h1 className="text-3xl font-bold text-neutral-900 mb-2">
             Вход в ParkingSmart
-          </h2>
-          <p className="text-neutral-400 mt-2">
+          </h1>
+          <p className="text-neutral-500 text-base">
             Введите номер телефона
           </p>
         </div>
 
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-neutral-400 mb-2">
-            Номер телефона
-          </label>
-          <input
-            type="tel"
-            value={formatPhone(phone)}
-            onChange={handleChange}
-            placeholder="+7 999 123 45 67"
-            className="w-full h-14 px-4 text-lg bg-white border border-neutral-200 rounded-xl focus:border-primary focus:ring-0 transition-colors placeholder:text-neutral-300"
-            autoFocus
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-neutral-700 mb-1">
+              Номер телефона
+            </label>
+            <div className="relative">
+              <input
+                type="tel"
+                value={phone}
+                onChange={handleChange}
+                placeholder="+7 XXX XXX XX XX"
+                className="w-full h-14 px-4 bg-white border-2 border-neutral-200 rounded-xl 
+                         text-lg font-mono tracking-wider
+                         focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
+                         placeholder:text-neutral-400 transition-all"
+                autoFocus
+              />
+              {isCheckingUser && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-neutral-400 mt-2">
+              Номер должен содержать 11 цифр, начинаться с 7 или 8
+            </p>
+          </div>
+
+          <TermsCheckbox 
+            checked={isTermsChecked}
+            onChange={setIsTermsChecked}
           />
-        </div>
 
-        <button
-          onClick={() => onPhoneSubmit(phone)}
-          disabled={!isValid}
-          className="w-full h-12 bg-primary text-white font-semibold rounded-xl hover:bg-primary-dark active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-primary disabled:active:scale-100"
-        >
-          Продолжить
-        </button>
+          <button
+            type="submit"
+            disabled={!isButtonEnabled}
+            className={`
+              w-full h-14 rounded-xl font-semibold text-base
+              transition-all duration-200
+              ${isButtonEnabled
+                ? 'bg-primary text-white active:scale-[0.98] shadow-lg hover:bg-primary-dark'
+                : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+              }
+            `}
+          >
+            Продолжить
+          </button>
+        </form>
 
-        <p className="text-xs text-neutral-400 text-center mt-6">
+        <p className="text-xs text-neutral-400 text-center mt-12 leading-relaxed">
           Один номер телефона — один аккаунт.<br />
           Убедитесь, что номер введён правильно.
         </p>
